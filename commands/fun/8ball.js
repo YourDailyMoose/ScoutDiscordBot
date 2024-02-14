@@ -40,7 +40,7 @@ module.exports = {
       'There\'s a slim chance.',
       'LOL NAH KEEP DREAMIN\' BUCKO',
       'yeah no',
-      "I'm not sure",
+      
     ];
 
     // Generate a random index to pick a response
