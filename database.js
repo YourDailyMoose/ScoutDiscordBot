@@ -28,23 +28,6 @@ function getDB() {
   return db;
 }
 
-async function getUserXP(guildID, userID) {
-  const guild = await client.db('guildData').collection('levels').findOne({ guildID: guildID });
-  return guild?.levels[userID] || 0;
-}
-
-async function updateUserXP(guildID, userID, xpGain) {
-  const guild = await client.db('guildData').collection('levels').findOne({ guildID: guildID });
-  if (!guild) {
-    // If guild document doesn't exist, create one with the user's XP
-    await client.db('guildData').collection('levels').insertOne({ guildID: guildID, levels: { [userID]: xpGain } });
-  } else {
-    // Update the user's XP, or set it if the user doesn't exist in the guild document
-    guild.levels[userID] = (guild.levels[userID] || 0) + xpGain;
-    await client.db('guildData').collection('levels').updateOne({ guildID: guildID }, { $set: { levels: guild.levels } });
-  }
-}
-
 async function onInvite(guildId) {
   // Assume 'db' is your database connection. Ensure it's properly initialized.
   const existingGuildData = await db.collection('botSettings').findOne({ _id: guildId });
@@ -53,23 +36,14 @@ async function onInvite(guildId) {
   if (!existingGuildData) {
     const guildData = {
 
-      //Start JSON Data
-
-      "_id": guildId,
+      "_id": Long.fromString(guildId),
       "moderationSettings": {
         "requireReason": false,
         "permissionHierarchy": true
       },
-      "loggingChannels": {
-        "moderation": null,
-        "joinLeave": null,
-        "message": null,
-        "voicejoinleave": null,
-        "memberChanges": null,
-        "serverChanges": null
-      },
-      "commandPermissions": {
+      "rolePermissions": {
         "godRoles": [],
+        "adminRoles": [],
         "banRoles": [],
         "kickRoles": [],
         "muteRoles": [],
@@ -125,11 +99,21 @@ async function onInvite(guildId) {
           "enabled": false,
           "levelRoles": [],
           "levelMessages": []
+        },
+        "logging": {
+          "enabled": true,
+          "loggingChannels": {
+            "moderation": null,
+            "joinLeave": null,
+            "message": null,
+            "voice": null,
+            "memberChanges": null,
+            "serverChanges": null
+          }
         }
       },
       "disabledCommands": []
-      //End JSON Data
-    };
+    }
 
     try {
       await db.collection('botSettings').insertOne(guildData);
@@ -139,21 +123,8 @@ async function onInvite(guildId) {
       console.error(`Error adding guild ${guildId} to the database:`, error);
       throw error; // Throw the error to be handled by the caller
     }
-  } else {
-    // Return an object with a flag and the existing data
-    return { found: true, data: existingGuildData };
   }
 }
-
-async function existingData(guildId) {
-  const existingGuildData = await db.collection('botSettings').findOne({ _id: guildId });
-  if (!existingGuildData) {
-    return false;
-  } else {
-    return true;
-  }
-}
-
 
 
 async function wipeGuildSettings(guildId) {
@@ -174,7 +145,7 @@ async function getGuildSettings(guildId) {
 }
 
 async function logPunishment(punishmentId, guildId, userId, punishmentType, reason, moderatorId, timestamp) {
-  
+
   const punishmentData = {
     _id: punishmentId,
     guildId: Long.fromString(guildId),
@@ -211,10 +182,31 @@ async function deletePunishment(punishmentId) {
   }
 }
 
-async function getPunishment (punishmentId) {
+async function getPunishment(punishmentId) {
   return await db.collection('punishmentData').findOne({ _id: punishmentId });
 }
 
+async function getUserXP(guildID, userID) {
+  const longGuildId = Long.fromString(guildID);
+  const guild = await db.collection('guildLevels').findOne({ _id: longGuildId });
+  return guild?.levels[userID] || 0;
+}
+
+async function updateUserXP(guildID, userID, xpGain) {
+  const longGuildId = Long.fromString(guildID);
+  const guild = await db.collection('guildLevels').findOne({ _id: longGuildId });
+  if (!guild) {
+    await db.collection('guildLevels').insertOne({ _id: longGuildId, levels: { [userID]: xpGain } });
+  } else {
+    guild.levels[userID] = (guild.levels[userID] || 0) + xpGain;
+    await db.collection('guildLevels').updateOne({ _id: longGuildId }, { $set: { levels: guild.levels } });
+  }
+}
+
+async function getGuildXpData(guildID) {
+  const longGuildId = Long.fromString(guildID);
+  return await db.collection('guildLevels').findOne({ _id: longGuildId });
+}
 
 
 module.exports = {
@@ -224,10 +216,10 @@ module.exports = {
   updateUserXP,
   onInvite,
   wipeGuildSettings,
-  existingData,
   getGuildSettings,
   logPunishment,
   getModLogs,
   deletePunishment,
   getPunishment,
+  getGuildXpData
 }

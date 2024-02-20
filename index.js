@@ -25,6 +25,7 @@ const {
   connectBlacklistDatabase,
   isUserBlacklisted,
 } = require("./blacklistDatabase.js");
+const { handleExperienceGain } = require("./leveingSystem/handleLeveling.js");
 const dotenv = require("dotenv");
 const { v4: uuidv4 } = require("uuid");
 
@@ -259,6 +260,10 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
   }
+});
+
+client.on("messageCreate", async (message) => {
+  handleExperienceGain(message);
 });
 
 client.on("guildCreate", async (guild) => {
