@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const botColours = require('../../index');
+const botColours = require('../../botColours.json');
 
 
 module.exports = {
@@ -53,10 +53,6 @@ module.exports = {
       .setColor(botColours.purple)
     
     interaction.reply({ embeds: [embed] });
-
-
-
-
 
   },
 };

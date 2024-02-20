@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { botColours } = require('../../index.js');
+const botColours = require('../../botColours.json');
 const fetch = require('node-fetch');
 
 module.exports = {
