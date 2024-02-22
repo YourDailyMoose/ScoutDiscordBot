@@ -28,7 +28,9 @@ module.exports = {
                 .setColor(botColours.primary)
                 .setTitle(`Leaderboard for ${interaction.guild.name}`)
                 .setDescription(description)
+                .setTimestamp()
                 .setFooter({ text: `Page ${i / itemsPerPage + 1}/${Math.ceil(sortedLevels.length / itemsPerPage)}`});
+
 
             embeds.push(leaderboardEmbed);
         }

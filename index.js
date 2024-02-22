@@ -22,6 +22,9 @@ const {
   getGuildSettings,
 } = require("./database");
 const {
+  handleBulkMessageDelete
+} = require("./messageHandlers/messageBulkDelete.js");
+const {
   connectBlacklistDatabase,
   isUserBlacklisted,
 } = require("./blacklistDatabase.js");
@@ -42,6 +45,8 @@ const client = new Client({
 });
 
 dotenv.config();
+
+client.cooldowns = new Collection();
 
 client.commands = new Collection();
 
@@ -106,6 +111,8 @@ client.on("interactionCreate", async (interaction) => {
   const userId = interaction.user.id;
   const blacklistedUser = await isUserBlacklisted(userId);
 
+
+
   if (blacklistedUser) {
     const blacklistedEmbed = new EmbedBuilder()
       .setColor(botColours.red)
@@ -142,6 +149,27 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
+    if (!client.cooldowns.has(command.data.name)) {
+      client.cooldowns.set(command.data.name, new Collection());
+    }
+
+    const now = Date.now();
+    const timestamps = client.cooldowns.get(command.data.name);
+    const cooldownAmount = (command.cooldown || 3) * 1000;
+
+    if (timestamps.has(interaction.user.id)) {
+      const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+
+      if (now < expirationTime) {
+        const timeLeft = (expirationTime - now) / 1000;
+        return interaction.reply({ content: `Please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.data.name}\` command.`, ephemeral: true });
+      }
+    }
+
+    timestamps.set(interaction.user.id, now);
+    setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+
+
     if (command.permission) {
       if (
         interaction.member.id === interaction.guild.ownerId ||
@@ -171,78 +199,52 @@ client.on("interactionCreate", async (interaction) => {
       const guildSettings = await getGuildSettings(interaction.guild.id);
 
       if (!guildSettings) {
-        return interaction.reply({
-          content: "The guild settings could not be found.",
-          ephemeral: true,
+        const errorId = uuidv4();
+        const channelError = new EmbedBuilder()
+          .setColor(botColours.red)
+          .setTitle("Error")
+          .setDescription(
+            `The guild settings could not be found for ${message.guild.name} (\`${message.guild.id}\`)\nPlease contact support with the following error ID\n\`${errorId}\``
+          )
+          .setTimestamp();
+
+        const errorMessage = `Error ID: ${errorId}, Error Details: ${error.stack}\n`;
+        fs.appendFile('errorLog.txt', errorMessage, (err) => {
+          if (err) throw err;
         });
-      }
 
-      if (!guildSettings.rolePermissions) {
-        return interaction.reply({
-          content:
-            "This command cannot be executed due to missing permissions configuration.",
-          ephemeral: true,
-        });
-      }
-
-      const userRoles = interaction.member.roles.cache.map((role) => role.id);
-
-      // Check if the user has a god role
-      if (
-        userRoles.some((role) =>
-          guildSettings.rolePermissions.godRoles
-            .map((godRole) => godRole.$numberLong)
-            .includes(role.id)
+        const supportServer = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel("Support Server")
+            .setStyle("Link")
+            .setURL("https://discord.gg/BwD7MgVMuq")
         )
-      ) {
-        try {
-          await command.execute(interaction);
-        } catch (error) {
-          console.error(error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({
-              content: "There was an error while executing this command!",
-              ephemeral: true,
-            });
-          } else {
-            await interaction.reply({
-              content: "There was an error while executing this command!",
-              ephemeral: true,
-            });
-          }
-        }
-        return;
-      }
 
-      // Check if all permissions required by the command are present in guildSettings.rolePermissions
-      if (
-        !command.permission.every((permission) =>
-          guildSettings.rolePermissions.hasOwnProperty(permission)
-        )
-      ) {
-        return interaction.reply({
-          content:
-            "This command cannot be executed due to missing permissions configuration.",
-          ephemeral: true,
-        });
-      }
+        return interaction.reply({ embeds: [channelError], components: [supportServer] });
 
-      // Check if the user's roles have all the required permissions
-      const hasPermission = command.permission.every((permission) =>
-        interaction.member.roles.cache.some((role) =>
-          guildSettings.rolePermissions[permission].includes(role.id)
-        )
-      );
-
-      if (!hasPermission) {
-        return interaction.reply({
-          content:
-            "You do not have the required permissions to run this command.",
-          ephemeral: true,
-        });
       }
     }
+  }
 
+
+  if (!guildSettings.rolePermissions) {
+    return interaction.reply({
+      content:
+        "This command cannot be executed due to missing permissions configuration.",
+      ephemeral: true,
+    });
+  }
+
+  const userRoles = interaction.member.roles.cache.map((role) => role.id);
+
+  // Check if the user has a god role
+  if (
+    userRoles.some((role) =>
+      guildSettings.rolePermissions.godRoles
+        .map((godRole) => godRole.$numberLong)
+        .includes(role.id)
+    )
+  ) {
     try {
       await command.execute(interaction);
     } catch (error) {
@@ -259,11 +261,61 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
     }
+    return;
+  }
+
+  // Check if all permissions required by the command are present in guildSettings.rolePermissions
+  if (
+    !command.permission.every((permission) =>
+      guildSettings.rolePermissions.hasOwnProperty(permission)
+    )
+  ) {
+    return interaction.reply({
+      content:
+        "This command cannot be executed due to missing permissions configuration.",
+      ephemeral: true,
+    });
+  }
+
+  // Check if the user's roles have all the required permissions
+  const hasPermission = command.permission.every((permission) =>
+    interaction.member.roles.cache.some((role) =>
+      guildSettings.rolePermissions[permission].includes(role.id)
+    )
+  );
+
+  if (!hasPermission) {
+    return interaction.reply({
+      content:
+        "You do not have the required permissions to run this command.",
+      ephemeral: true,
+    });
+  }
+
+  try {
+    await command.execute(interaction);
+  } catch (error) {
+    console.error(error);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({
+        content: "There was an error while executing this command!",
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({
+        content: "There was an error while executing this command!",
+        ephemeral: true,
+      });
+    }
   }
 });
 
 client.on("messageCreate", async (message) => {
-  handleExperienceGain(message);
+  handleExperienceGain(message, client);
+});
+
+client.on("messageDeleteBulk", async (messages) => {
+  handleBulkMessageDelete(messages, client);
 });
 
 client.on("guildCreate", async (guild) => {
@@ -330,10 +382,10 @@ client.on("messageDelete", async (message) => {
       )
       .setTimestamp();
 
-      const errorMessage = `Error ID: ${errorId}, Error Details: ${error.stack}\n`;
-      fs.appendFile('errorLog.txt', errorMessage, (err) => {
-        if (err) throw err;
-      });
+    const errorMessage = `Error ID: ${errorId}, Error Details: ${error.stack}\n`;
+    fs.appendFile('errorLog.txt', errorMessage, (err) => {
+      if (err) throw err;
+    });
 
     const supportServer = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -437,10 +489,10 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
       )
       .setTimestamp();
 
-      const errorMessage = `Error ID: ${errorId}, Error Details: ${error.stack}\n`;
-      fs.appendFile('errorLog.txt', errorMessage, (err) => {
-        if (err) throw err;
-      });
+    const errorMessage = `Error ID: ${errorId}, Error Details: ${error.stack}\n`;
+    fs.appendFile('errorLog.txt', errorMessage, (err) => {
+      if (err) throw err;
+    });
 
     const supportServer = new ActionRowBuilder().addComponents(
       new ButtonBuilder()

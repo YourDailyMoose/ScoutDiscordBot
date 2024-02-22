@@ -1,5 +1,5 @@
 const cooldowns = new Map();
-const { getUserXP, updateUserXP } = require('../database.js');
+const { getUserXP, updateUserXP, getGuildSettings } = require('../database.js');
 const { EmbedBuilder } = require('discord.js');
 const botColours = require('../botColours.json');
 
@@ -7,6 +7,42 @@ async function handleExperienceGain(message) {
   if (message.author.bot) {
     return;
   }
+
+  const guildSettings = await getGuildSettings(message.guild.id);
+
+  if (!guildSettings) {
+    const errorId = uuidv4();
+    const channelError = new EmbedBuilder()
+      .setColor(botColours.red)
+      .setTitle("Error")
+      .setDescription(
+        `The guild settings could not be found for ${message.guild.name} (\`${message.guild.id}\`)\nPlease contact support with the following error ID\n\`${errorId}\``
+      )
+      .setTimestamp();
+
+    const errorMessage = `Error ID: ${errorId}, Error Details: ${error.stack}\n`;
+    fs.appendFile('errorLog.txt', errorMessage, (err) => {
+      if (err) throw err;
+    });
+
+    const supportServer = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Support Server")
+        .setStyle("Link")
+        .setURL("https://discord.gg/BwD7MgVMuq")
+    )
+
+    return interaction.reply({ embeds: [channelError], components: [supportServer] });
+  }
+
+  if (!guildSettings.modules.levels.enabled) {
+
+    return;
+
+  }
+
+  
+
   const now = Date.now();
   const cooldownKey = `${message.guild.id}-${message.author.id}`;
   const lastMessageTimestamp = cooldowns.get(cooldownKey) || 0;

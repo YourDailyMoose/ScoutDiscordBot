@@ -20,7 +20,9 @@ module.exports = {
     const rankEmbed = new EmbedBuilder()  
       .setColor(botColours.primary)
       .setTitle(`${user.username}'s Level`)
-      .setDescription(`User ID: ${user.id}\n\nLevel: ${level} (${xp}xp)`)
+      .setDescription(`Level: ${level} (${xp}xp)`)
+      .setThumbnail(user.displayAvatarURL() || user.defaultAvatarURL())
+      .setTimestamp();
       
 
     await interaction.reply({ embeds: [rankEmbed] });
