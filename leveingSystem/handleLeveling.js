@@ -1,5 +1,5 @@
 const cooldowns = new Map();
-const { getUserXP, updateUserXP, getGuildSettings } = require('../database.js');
+const { getUserXP, addUserXP, getGuildSettings, getUserLevel, getLevelXPRequirement } = require('../database.js');
 const { EmbedBuilder } = require('discord.js');
 const botColours = require('../botColours.json');
 
@@ -41,8 +41,6 @@ async function handleExperienceGain(message) {
 
   }
 
-  
-
   const now = Date.now();
   const cooldownKey = `${message.guild.id}-${message.author.id}`;
   const lastMessageTimestamp = cooldowns.get(cooldownKey) || 0;
@@ -54,18 +52,15 @@ async function handleExperienceGain(message) {
 
   cooldowns.set(cooldownKey, now);
 
-  const xpGain = Math.floor(Math.random() * (50 - 10 + 1)) + 10; // Random XP between 10 and 50
-  const currentXP = await getUserXP(message.guild.id, message.author.id);
-  const newXP = currentXP + xpGain;
+  const xpGain = Math.floor(Math.random() * (30 - 10 + 1)) + 10; // Random XP between 10 and 30
 
   // Leveling logic here:
-  const currentLevel = Math.floor((currentXP - 500) / 500) + 1;
-  const newLevel = Math.floor((newXP - 500) / 500) + 1;
+  const currentLevel = await getUserLevel(message.guild.id, message.author.id);
+  await addUserXP(message.guild.id, message.author.id, xpGain); // Update XP first
+  const newLevel = await getUserLevel(message.guild.id, message.author.id); // Then get the new level
 
-  // Calculate the XP required for the next level
-  const nextLevelXP = 500 * (1 + 0.015 * (newLevel - 1));
 
-  if (newXP >= nextLevelXP && newLevel > currentLevel) {
+  if (newLevel > currentLevel) {
     const embed = new EmbedBuilder()
       .setTitle('Level Up!')
       .setDescription(`Congratulations, <@${message.author.id}>! You leveled up to level \`${newLevel}\`! 🎉`)
@@ -76,7 +71,7 @@ async function handleExperienceGain(message) {
   }
 
   // Update the user's XP in the database
-  await updateUserXP(message.guild.id, message.author.id, xpGain);
+  await addUserXP(message.guild.id, message.author.id, xpGain);
 }
 
 module.exports = {

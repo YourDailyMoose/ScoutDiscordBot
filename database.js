@@ -192,7 +192,7 @@ async function getUserXP(guildID, userID) {
   return guild?.levels[userID] || 0;
 }
 
-async function updateUserXP(guildID, userID, xpGain) {
+async function addUserXP(guildID, userID, xpGain) {
   const longGuildId = Long.fromString(guildID);
   const guild = await db.collection('guildLevels').findOne({ _id: longGuildId });
   if (!guild) {
@@ -208,12 +208,53 @@ async function getGuildXpData(guildID) {
   return await db.collection('guildLevels').findOne({ _id: longGuildId });
 }
 
+async function getUserLevel(guildID, userID) {
+  const xp = await getUserXP(guildID, userID);
+  let baseXP = 100; // XP required for the first level
+  let factor = 1.15; // Each level requires 15% more XP than the previous level
+
+  // If the user's XP is less than 100, they are level 0
+  if (xp < 100) {
+    return 0;
+  }
+
+  // Calculate the total XP required for each level
+  let totalXPForLevels = [];
+  for (let level = 1; level <= 100; level++) {
+    let totalXP = baseXP * Math.pow(level, factor);
+    totalXPForLevels.push(Math.round(totalXP));
+  }
+
+  // Find the user's level based on their XP
+  let level = totalXPForLevels.findIndex(levelXP => levelXP > xp) + 1;
+
+  return level;
+}
+
+async function getUserGuildRank(guildID, userID) {
+  const longGuildId = Long.fromString(guildID);
+  const guild = await db.collection('guildLevels').findOne({ _id: longGuildId });
+  const sorted = Object.entries(guild.levels).sort(([, a], [, b]) => b - a);
+  const rank = sorted.findIndex(([id]) => id === userID) + 1;
+  return rank;
+}
+
+function getLevelXPRequirement(level) {
+  let baseXP = 100; // XP required for the first level
+  let factor = 1.15; // Each level requires 15% more XP than the previous level
+
+  // Calculate the XP required for the specified level
+  let totalXP = baseXP * Math.pow(level, factor);
+
+  return Math.round(totalXP);
+}
+
 
 module.exports = {
   connectDatabase,
   getDB,
   getUserXP,
-  updateUserXP,
+  addUserXP,
   onInvite,
   wipeGuildSettings,
   getGuildSettings,
@@ -221,5 +262,8 @@ module.exports = {
   getModLogs,
   deletePunishment,
   getPunishment,
-  getGuildXpData
+  getGuildXpData,
+  getUserLevel,
+  getUserGuildRank,
+  getLevelXPRequirement
 }

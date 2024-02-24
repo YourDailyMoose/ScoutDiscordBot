@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getGuildXpData } = require('../../database');
+const { getGuildXpData, getUserLevel } = require('../../database');
 const botColours = require('../../botColours.json');
 
 module.exports = {
@@ -9,7 +9,7 @@ module.exports = {
     async execute(interaction) {
         const guildXpData = await getGuildXpData(interaction.guild.id);
         const levels = guildXpData.levels;
-    
+
         const sortedLevels = Object.entries(levels).sort((a, b) => b[1] - a[1]);
 
         const itemsPerPage = 10;
@@ -17,20 +17,19 @@ module.exports = {
 
         const embeds = [];
         for (let i = 0; i < sortedLevels.length; i += itemsPerPage) {
-            const description = sortedLevels.slice(i, i + itemsPerPage).map((entry, index) => {
+            const description = await Promise.all(sortedLevels.slice(i, i + itemsPerPage).map(async (entry, index) => {
                 const [userId, xp] = entry;
-                const level = Math.floor((xp - 500) / 500) + 1;
+                const level = await getUserLevel(interaction.guild.id, userId);
                 const user = interaction.guild.members.cache.get(userId);
-                return `${i + index + 1}. ${user?.user.username || 'Unknown User'}: ${xp}xp (Level ${level})`;
-            }).join('\n');
+                return `${i + index + 1}. ${`<@${userId}>`} - Level ${level} (${xp}xp)`;
+            }));
 
             const leaderboardEmbed = new EmbedBuilder()
                 .setColor(botColours.primary)
                 .setTitle(`Leaderboard for ${interaction.guild.name}`)
-                .setDescription(description)
+                .setDescription(description.join('\n'))
                 .setTimestamp()
-                .setFooter({ text: `Page ${i / itemsPerPage + 1}/${Math.ceil(sortedLevels.length / itemsPerPage)}`});
-
+                .setFooter({ text: `Page ${i / itemsPerPage + 1}/${Math.ceil(sortedLevels.length / itemsPerPage)}` });
 
             embeds.push(leaderboardEmbed);
         }
